@@ -10,11 +10,11 @@ import {
 	MenuList,
 	Select,
 } from "@chakra-ui/react";
-import Editor from "@monaco-editor/react";
+import Editor, { useMonaco } from "@monaco-editor/react";
 import { editor } from "monaco-editor";
 import { useEffect, useRef, useState } from "react";
-import { io } from "socket.io-client";
 import EndMatchButton from "./EndMatchButton";
+import collabSocketManager from "./Sockets/CollaborationSocketManager";
 
 export default function CodeEditor({ socketRoom, matchedUser, colorMode }) {
 	const editorRef = useRef(null);
@@ -24,6 +24,7 @@ export default function CodeEditor({ socketRoom, matchedUser, colorMode }) {
 	const [language, setLanguage] = useState("javascript");
 	const [code, setCode] = useState("//some comments");
 	const [theme, setTheme] = useState("light");
+
 	const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor) => {
 		editorRef.current = editor;
 	};
@@ -31,8 +32,9 @@ export default function CodeEditor({ socketRoom, matchedUser, colorMode }) {
 	useEffect(() => {
 		handleThemeChange(colorMode);
 	}, [colorMode]);
+
 	const handleCodeChange = (
-		value = "",
+		value: string,
 		event: editor.IModelContentChangedEvent
 	) => {
 		if (isIncomingCode.current) {
@@ -40,7 +42,7 @@ export default function CodeEditor({ socketRoom, matchedUser, colorMode }) {
 			return;
 		}
 		setCode(editorRef.current.getModel().getValue());
-		socket?.emit("codeChange", event);
+		collabSocketManager.emitEvent("codeChange", event);
 	};
 
 	const handleThemeChange = (e: string) => {
@@ -57,22 +59,20 @@ export default function CodeEditor({ socketRoom, matchedUser, colorMode }) {
 			e.target.value
 		);
 		setLanguage(e.target.value);
-		socket?.emit("languageChange", e.target.value);
+		collabSocketManager.emitEvent("languageChange", e.target.value);
 	};
 
 	useEffect(() => {
-		const socket = io({path: "/collaboration_service/socket.io/"});
-		setSocket(socket);
-
-		socket?.emit("joinRoom", socketRoom);
-
-		socket.on("codeChange", (event) => {
+		console.log(monaco);
+		collabSocketManager.emitEvent("joinRoom", socketRoom);
+		collabSocketManager.setRoom(socketRoom);
+		collabSocketManager.subscribeToEvent("codeChange", (event) => {
 			isIncomingCode.current = true;
 			editorRef.current.getModel()?.applyEdits(event.changes);
 			setCode(editorRef.current.getModel().getValue());
 		});
 
-		socket.on("languageChange", (event) => {
+		collabSocketManager.subscribeToEvent("languageChange", (event) => {
 			console.log("received", event);
 			(window as any).monaco.editor.setModelLanguage(
 				editorRef.current?.getModel(),
@@ -81,8 +81,8 @@ export default function CodeEditor({ socketRoom, matchedUser, colorMode }) {
 			setLanguage(event);
 		});
 		return () => {
-			socket.disconnect();
-		};
+			editorRef.current.dispose();
+		}
 	}, []);
 
 	const handleFormat = () => {
@@ -113,10 +113,10 @@ export default function CodeEditor({ socketRoom, matchedUser, colorMode }) {
 						{language == "javascript"
 							? "Javascript"
 							: language == "python"
-							? "Python"
-							: language == "C++"
-							? "C++"
-							: "Java"}
+								? "Python"
+								: language == "C++"
+									? "C++"
+									: "Java"}
 					</MenuButton>
 					<MenuList>
 						<MenuItem onClick={handleLanguageChange} value="javascript">

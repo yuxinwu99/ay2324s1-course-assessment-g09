@@ -80,8 +80,8 @@ export default function CreateCustomRoom() {
 				</MenuList>
 			</Menu>
 			<Input onChange={(e) => setRoomName(e.target.value)} />
-			(roomExists &&
-			<Text>Please choose another name, the room already exist</Text>)
+			{roomExists &&
+			<Text>Please choose another name, the room already exist</Text>}
 			<Button onClick={handleCreateCustom}>Create and join room</Button>
 		</Box>
 	);

@@ -4,7 +4,7 @@ import Peer from "simple-peer";
 import { Box, Text, Button, Input } from "@chakra-ui/react";
 import socketManager from "./Sockets/CommunicationSocketManager";
 import VideoComponent from "./VideoComponent";
-import { set } from "zod";
+import { useRouter } from "next/router"
 
 export default function VideoCall({ videoOn, setVideoOn }) {
   const self = socketManager.getSocketId();
@@ -13,23 +13,25 @@ export default function VideoCall({ videoOn, setVideoOn }) {
   const [receiverStream, setReceiverStream] = useState<MediaStream>();
   const [receivingCall, setReceivingCall] = useState(false);
   const [caller, setCaller] = useState("");
-  const [callerSignal, setCallerSignal] = useState();
   const [callAccepted, setCallAccepted] = useState(false);
-  const [callEnded, setCallEnded] = useState(false);
+  const [callerSignal, setCallerSignal] = useState();
   const connectionRef = useRef(null);
-
+  const router = useRouter()
   useEffect(() => {
     socketManager.subscribeToEvent("callUser", (data) => {
       setReceivingCall(true);
       setCaller(data.from);
       setCallerSignal(data.signal);
     });
+
     socketManager.subscribeToEvent("callEnded", () => {
-      setCallEnded(true);
-      connectionRef.current.destroy();
-      callerStream.getTracks().forEach((track) => track.stop());
-      receiverStream.getTracks().forEach((track) => track.stop());
+      console.log("call ended");
+      if (connectionRef.current) {
+        connectionRef.current.destroy();
+      }
+      router.push("/");
     });
+
   }, []);
 
   const getVideo = async () => {
@@ -39,7 +41,16 @@ export default function VideoCall({ videoOn, setVideoOn }) {
         audio: true,
       });
       setcallerStream(callerStream);
+      toggleCamera();
       setVideoOn(!videoOn);
+      socketManager.subscribeToEvent("callEnded", () => {
+        console.log("caller stream");
+        console.log(callerStream);
+        if (callerStream) {
+          callerStream.getTracks().forEach((track) => track.stop())
+        }
+      }
+      );
     } catch (err) {
       console.log(err);
     }
@@ -58,8 +69,16 @@ export default function VideoCall({ videoOn, setVideoOn }) {
         from: self,
       });
     });
+
     peer.on("stream", (stream) => {
       setReceiverStream(stream);
+    });
+    socketManager.subscribeToEvent("callEnded", () => {
+      console.log("receiver stream");
+      console.log(receiverStream);
+      if (receiverStream) {
+        receiverStream.getTracks().forEach((track) => track.stop());
+      }
     });
     socketManager.subscribeToEvent("callAccepted", (signal) => {
       console.log("call accepted");
@@ -71,50 +90,44 @@ export default function VideoCall({ videoOn, setVideoOn }) {
   };
 
 
-	const toggleCamera = () => {
-		callerStream.getVideoTracks()[0].enabled =
-			!callerStream.getVideoTracks()[0].enabled;
-	};
+  const toggleCamera = () => {
+    callerStream.getVideoTracks()[0].enabled =
+      !callerStream.getVideoTracks()[0].enabled;
+  };
 
-	const answerCall = async () => {
-		setCallAccepted(true);
-		const peer = new Peer({
-			initiator: false,
-			trickle: false,
-			stream: callerStream,
-		});
-		peer.on("signal", (data) => {
-			console.log(data);
-			socketManager.emitEvent("answerCall", { signal: data, to: caller });
-		});
-		peer.on("stream", (stream) => {
-			setReceiverStream(stream);
-		});
-		peer.signal(callerSignal);
-		connectionRef.current = peer;
-	};
-
-
-  const leaveCall = () => {
-    setCallEnded(true);
-    connectionRef.current.destroy();
+  const answerCall = async () => {
+    setCallAccepted(true);
+    const peer = new Peer({
+      initiator: false,
+      trickle: false,
+      stream: callerStream,
+    });
+    peer.on("signal", (data) => {
+      console.log(data);
+      socketManager.emitEvent("answerCall", { signal: data, to: caller });
+    });
+    peer.on("stream", (stream) => {
+      setReceiverStream(stream);
+    });
+    peer.signal(callerSignal);
+    connectionRef.current = peer;
   };
 
 
-	return (
-		<Box>
-			<Button onClick={toggleCamera} colorScheme="blue">
-				Toggle Camera
-			</Button>
-			<Button onClick={getVideo} colorScheme="blue">
-				Get Video
-			</Button>
-			{!callerStream ? null : (
-				<Box>
-					<VideoComponent stream={callerStream} isLocal={true} />
-					<VideoComponent stream={receiverStream} isLocal={false} />
-				</Box>
-			)}
+  return (
+    <Box>
+      <Button onClick={toggleCamera} colorScheme="blue">
+        Toggle Camera
+      </Button>
+      <Button onClick={getVideo} colorScheme="blue">
+        Get Video
+      </Button>
+      {!callerStream ? null : (
+        <Box>
+          <VideoComponent stream={callerStream} isLocal={true} />
+          <VideoComponent stream={receiverStream} isLocal={false} />
+        </Box>
+      )}
 
       <Button onClick={callUser} colorScheme="purple" mr={2}>
         Call
@@ -123,11 +136,6 @@ export default function VideoCall({ videoOn, setVideoOn }) {
       {receivingCall ? (
         <Button onClick={answerCall} colorScheme="green">
           Answer
-        </Button>
-      ) : null}
-      {callAccepted && !callEnded ? (
-        <Button onClick={leaveCall} colorScheme="red">
-          End Call
         </Button>
       ) : null}
     </Box>

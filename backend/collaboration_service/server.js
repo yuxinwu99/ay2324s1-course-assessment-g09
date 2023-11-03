@@ -31,6 +31,9 @@ io.on("connection", (socket) => {
 			// console.log(data);
 			socket.to(room).emit("languageChange", data);
 		});
+		socket.on("endCollab", () => {
+			io.to(room).emit("endCollab");
+		});
 	});
 });
 

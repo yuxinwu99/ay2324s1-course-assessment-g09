@@ -40,7 +40,9 @@ io.on("connection", (socket) => {
 		console.log("target socket: ", data.to);
 		io.to(data.to).emit("signal", data.signal);
 	});
-
+	socket.on("endMatch", (data) => {
+		io.to(data).emit("callEnded");
+	});
 	socket.on("answerCall", (data) => {
 		console.log("answer call");
 		// console.log(data);
